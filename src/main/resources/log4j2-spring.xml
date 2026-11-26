@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN" monitorInterval="30">
+
+    <Properties>
+        <Property name="LOG_DIR">${sys:user.home}/logs/egovframe-webflux-mcp-client</Property>
+        <Property name="LOG_FILE">application</Property>
+        <Property name="CONSOLE_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight{%-5level} [%t] %style{%logger{36}}{cyan} - %msg%n</Property>
+        <Property name="FILE_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%t] %logger{36} - %msg%n</Property>
+    </Properties>
+
+    <Appenders>
+        <!--
+            charset 을 명시하지 않으면 PatternLayout 은 JVM 기본 charset(file.encoding)을 쓴다.
+            pom.xml 에서 -Dfile.encoding=UTF-8 을 주고 있으므로(stdio MCP 서버 한글 깨짐 대응),
+            명시하지 않으면 UTF-8 로 출력되어 MS949 콘솔에서 '구성' -> '援ъ꽦' 처럼 깨진다.
+
+            콘솔은 터미널 인코딩(native.encoding)에, 로그 파일은 UTF-8 에 맞춘다.
+            native.encoding 은 Java 17+ 가 제공하며 한글 Windows 에서 MS949, 대개의 Linux 에서 UTF-8 이다.
+            콘솔까지 UTF-8 로 통일하려면 터미널에서 chcp 65001 을 먼저 실행하면 된다.
+        -->
+        <!-- Console Appender (default) -->
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="${CONSOLE_PATTERN}" charset="${sys:native.encoding:-UTF-8}" />
+        </Console>
+
+        <!-- RollingFile Appender (prod) -->
+        <RollingFile name="RollingFile"
+                     fileName="${LOG_DIR}/${LOG_FILE}.log"
+                     filePattern="${LOG_DIR}/${LOG_FILE}-%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout pattern="${FILE_PATTERN}" charset="UTF-8" />
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true" />
+                <SizeBasedTriggeringPolicy size="50MB" />
+            </Policies>
+            <DefaultRolloverStrategy max="30">
+                <Delete basePath="${LOG_DIR}" maxDepth="1">
+                    <IfFileName glob="${LOG_FILE}-*.log.gz" />
+                    <IfLastModified age="30d" />
+                </Delete>
+            </DefaultRolloverStrategy>
+        </RollingFile>
+    </Appenders>
+
+    <Loggers>
+        <!-- Spring Profile: default / local -->
+        <SpringProfile name="default | local">
+            <Root level="INFO">
+                <AppenderRef ref="Console" />
+            </Root>
+        </SpringProfile>
+
+        <!-- Spring Profile: prod -->
+        <SpringProfile name="prod">
+            <Root level="INFO">
+                <AppenderRef ref="Console" />
+                <AppenderRef ref="RollingFile" />
+            </Root>
+        </SpringProfile>
+    </Loggers>
+
+</Configuration>

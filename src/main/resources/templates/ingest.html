@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>지식 베이스 적재: RAG 임베딩</title>
+    <style>
+        /* KRDS 토큰 (chat.html 과 동일) */
+        :root {
+            --primary-50:  #256ef4;
+            --primary-60:  #0b50d0;
+            --primary-5:   #ecf2fe;
+            --gray-0:      #ffffff;
+            --gray-5:      #f4f5f6;
+            --gray-10:     #e6e8ea;
+            --gray-20:     #cdd1d5;
+            --gray-30:     #b1b8be;
+            --gray-40:     #8a949e;
+            --gray-50:     #6d7882;
+            --gray-60:     #58616a;
+            --gray-70:     #464c53;
+            --gray-80:     #33363d;
+            --gray-90:     #1e2124;
+            --success-50:  #228738;
+            --success-5:   #eaf6ec;
+            --danger-50:   #de3412;
+            --danger-5:    #fdefec;
+            --warning-50:  #9e6a00;
+            --warning-5:   #fff3db;
+
+            --font:        'Malgun Gothic', 'Noto Sans KR', -apple-system, sans-serif;
+            --header-h:    56px;
+            --radius:      4px;
+            --shadow:      0 1px 4px rgba(0,0,0,.08);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font);
+            font-size: 14px;
+            color: var(--gray-90);
+            line-height: 1.5;
+            background: var(--gray-5);
+            min-height: 100vh;
+        }
+
+        /* wrapper */
+        .wrapper {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* #krds-header (chat.html 과 동일 구조) */
+        #krds-header {
+            height: var(--header-h);
+            background: var(--gray-0);
+            border-bottom: 1px solid var(--gray-10);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 16px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 0;
+            z-index: 200;
+        }
+
+        #krds-header .left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-service-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--gray-90);
+            text-decoration: none;
+        }
+
+        .header-divider {
+            width: 1px; height: 18px;
+            background: var(--gray-20);
+        }
+
+        .header-page-name {
+            font-size: 13px;
+            color: var(--gray-50);
+        }
+
+        #krds-header .right {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+        }
+
+        /* #wrap → #container */
+        #wrap { flex: 1; }
+
+        #container.main-container {
+            padding: 0;
+        }
+
+        /* .conts-area (사이드 nav 없이 단일 컬럼) */
+        .conts-area {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 24px 16px 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* breadcrumb (레퍼런스 구조 일치) */
+        .krds-breadcrumb-wrap .breadcrumb {
+            display: flex;
+            list-style: none;
+            gap: 0;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .krds-breadcrumb-wrap .breadcrumb li {
+            display: flex;
+            align-items: center;
+            font-size: 13px;
+            color: var(--gray-50);
+        }
+
+        .krds-breadcrumb-wrap .breadcrumb li + li::before {
+            content: '/';
+            margin: 0 6px;
+            color: var(--gray-20);
+        }
+
+        .krds-breadcrumb-wrap .breadcrumb li a,
+        .krds-breadcrumb-wrap .breadcrumb li a.txt {
+            color: var(--primary-50);
+            text-decoration: none;
+            font-size: 13px;
+        }
+        .krds-breadcrumb-wrap .breadcrumb li a:hover { text-decoration: underline; }
+
+        /* heading-large (레퍼런스 구조 일치) */
+        h2.heading-large {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--gray-90);
+            margin-bottom: 0;
+        }
+
+        /* form-group (레퍼런스 구조 일치) */
+        .form-group { /* no extra margin; gap on conts-area handles spacing */ }
+
+        /* 카드 (input-form 스타일, 레퍼런스 참고) */
+        .input-form {
+            background: var(--gray-0);
+            border: 1px solid var(--gray-10);
+            border-radius: var(--radius);
+            padding: 24px;
+            box-shadow: var(--shadow);
+        }
+
+        .input-form-header {
+            padding-bottom: 16px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--gray-10);
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--gray-90);
+        }
+
+        /* 서버 상태 배너 */
+        .server-banner {
+            display: none;
+            padding: 10px 14px;
+            border-radius: var(--radius);
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            border-left: 3px solid transparent;
+        }
+        .server-banner.ok {
+            display: block;
+            background: var(--success-5);
+            color: var(--success-50);
+            border-color: var(--success-50);
+        }
+        .server-banner.ng {
+            display: block;
+            background: var(--danger-5);
+            color: var(--danger-50);
+            border-color: var(--danger-50);
+        }
+
+        /* 설명 텍스트 */
+        .desc-text {
+            font-size: 13px;
+            color: var(--gray-50);
+            margin-bottom: 20px;
+            line-height: 1.7;
+        }
+
+        /* form-label */
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--gray-80);
+            margin-bottom: 8px;
+        }
+
+        /* 드롭존 */
+        .drop-zone {
+            border: 2px dashed var(--gray-20);
+            border-radius: var(--radius);
+            padding: 36px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color .2s, background .2s;
+            margin-bottom: 20px;
+        }
+        .drop-zone:hover,
+        .drop-zone.dragover {
+            border-color: var(--primary-50);
+            background: var(--primary-5);
+        }
+        .drop-zone input[type="file"] { display: none; }
+
+        .drop-zone-icon { margin-bottom: 12px; }
+        .drop-zone-icon svg { display: block; margin: 0 auto; opacity: .45; transition: opacity .2s; }
+        .drop-zone:hover .drop-zone-icon svg,
+        .drop-zone.dragover .drop-zone-icon svg { opacity: .7; }
+
+        .drop-zone-text {
+            font-size: 14px;
+            color: var(--gray-50);
+            margin-bottom: 4px;
+        }
+        .drop-zone-hint { font-size: 12px; color: var(--gray-40); }
+
+        .selected-file {
+            margin-top: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--primary-50);
+        }
+
+        /* krds-btn (chat.html 과 동일) */
+        .krds-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px 18px;
+            border: 1px solid var(--gray-20);
+            border-radius: var(--radius);
+            background: var(--gray-0);
+            font-size: 13px;
+            font-weight: 600;
+            font-family: var(--font);
+            color: var(--gray-80);
+            cursor: pointer;
+            transition: background .15s, border-color .15s;
+            white-space: nowrap;
+            text-decoration: none;
+        }
+        .krds-btn:hover { background: var(--gray-5); }
+
+        .krds-btn.primary {
+            background: var(--primary-50);
+            color: #fff;
+            border-color: var(--primary-50);
+        }
+        .krds-btn.primary:hover    { background: var(--primary-60); border-color: var(--primary-60); }
+        .krds-btn.primary:disabled { background: var(--gray-20); border-color: var(--gray-20); color: var(--gray-50); cursor: not-allowed; }
+
+        .krds-btn.medium { padding: 9px 20px; font-size: 14px; }
+
+        /* 상태 박스 */
+        .status-box {
+            display: none;
+            margin-top: 16px;
+            padding: 12px 16px;
+            border-radius: var(--radius);
+            font-size: 13px;
+            border-left: 3px solid transparent;
+        }
+        .status-box.loading {
+            display: block;
+            background: var(--primary-5);
+            color: var(--primary-50);
+            border-color: var(--primary-50);
+        }
+        .status-box.success {
+            display: block;
+            background: var(--success-5);
+            color: var(--success-50);
+            border-color: var(--success-50);
+            font-weight: 600;
+        }
+        .status-box.failure {
+            display: block;
+            background: var(--danger-5);
+            color: var(--danger-50);
+            border-color: var(--danger-50);
+            font-weight: 600;
+        }
+
+        .loading-dots::after {
+            content: '';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+        @keyframes dots {
+            0%   { content: ''; }
+            25%  { content: '.'; }
+            50%  { content: '..'; }
+            75%  { content: '...'; }
+        }
+
+        /*
+         * 적재 진행률.
+         *
+         * 서버가 보내는 notifications/progress 를 SSE 로 받아 그린다. 진행률이 한 건도
+         * 오지 않는 정상 경로가 있으므로(변경된 페이지 없음 · 정책 거부 · 범용 클라이언트)
+         * 첫 이벤트를 받은 뒤에 보이게 한다. 성공·실패 판정은 POST 응답이 한다.
+         */
+        .progress-panel {
+            display: none;
+            margin-top: 12px;
+        }
+        .progress-panel.visible {
+            display: block;
+        }
+        .progress-track {
+            height: 8px;
+            border-radius: 999px;
+            background: var(--gray-10);
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            width: 0;
+            border-radius: 999px;
+            background: var(--primary-50);
+            transition: width .3s ease;
+        }
+        .progress-caption {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--gray-50);
+        }
+        .progress-step {
+            flex-shrink: 0;
+            font-variant-numeric: tabular-nums;
+        }
+
+        @media (max-width: 600px) {
+            .conts-area { padding: 16px 14px 32px; }
+            .input-form { padding: 18px 14px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="wrapper">
+
+    <!-- #krds-header (chat.html 과 동일 구조) -->
+    <header id="krds-header">
+        <div class="left">
+            <a class="header-service-name" href="/">MCP 채팅 클라이언트</a>
+        </div>
+        <div class="header-divider"></div>
+        <span class="header-page-name">지식 베이스 적재</span>
+        <div class="right">
+            <a class="krds-btn" th:href="@{/}">&#8592; 채팅으로 돌아가기</a>
+        </div>
+    </header>
+
+    <!-- #wrap → #container (레퍼런스 구조 일치) -->
+    <main id="wrap">
+        <div id="container" class="main-container">
+            <div class="conts-area">
+
+                <!-- breadcrumb (레퍼런스 구조 일치) -->
+                <nav class="krds-breadcrumb-wrap" aria-label="브레드크럼" id="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="home"><a href="/" class="txt">홈</a></li>
+                        <li>지식 베이스 적재</li>
+                    </ol>
+                </nav>
+
+                <!-- heading-large (레퍼런스 구조 일치) -->
+                <h2 class="heading-large">RAG 지식 베이스 적재</h2>
+
+                <!-- form-group / input-form (레퍼런스 구조 일치) -->
+                <div class="form-group">
+                    <div class="input-form">
+
+                        <div class="input-form-header">문서 선택 및 임베딩</div>
+
+                        <div class="server-banner" id="serverBanner"></div>
+
+                        <p class="desc-text">
+                            PDF, DOCX, HWP, HWPX, 마크다운(.md), 텍스트(.txt) 파일을 서버 RAG 지식 베이스에 임베딩합니다.<br>
+                            최대 파일 크기: 50MB
+                        </p>
+
+                        <label class="form-label">파일 선택</label>
+                        <div class="drop-zone" id="dropZone">
+                            <input type="file" id="fileInput" accept=".pdf,.docx,.hwp,.hwpx,.md,.txt">
+                            <div class="drop-zone-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 52 52" fill="none">
+                                    <path d="M10 4h22l12 12v32H10V4z" fill="#e6e8ea" stroke="#b1b8be" stroke-width="2" stroke-linejoin="round"/>
+                                    <path d="M32 4v12h12" fill="#cdd1d5" stroke="#b1b8be" stroke-width="2" stroke-linejoin="round"/>
+                                    <line x1="17" y1="24" x2="35" y2="24" stroke="#b1b8be" stroke-width="2" stroke-linecap="round"/>
+                                    <line x1="17" y1="30" x2="35" y2="30" stroke="#b1b8be" stroke-width="2" stroke-linecap="round"/>
+                                    <line x1="17" y1="36" x2="27" y2="36" stroke="#b1b8be" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                            </div>
+                            <p class="drop-zone-text">파일을 여기에 끌어다 놓거나 클릭하여 선택</p>
+                            <p class="drop-zone-hint">.pdf &nbsp;/&nbsp; .docx &nbsp;/&nbsp; .hwp &nbsp;/&nbsp; .hwpx &nbsp;/&nbsp; .md &nbsp;/&nbsp; .txt 지원</p>
+                            <div class="selected-file" id="selectedFileName"></div>
+                        </div>
+
+                        <button class="krds-btn primary medium" id="uploadBtn" disabled onclick="startUpload()">
+                            임베딩 시작
+                        </button>
+
+                        <div class="status-box" id="statusBox"></div>
+
+                        <div class="progress-panel" id="progressPanel">
+                            <div class="progress-track">
+                                <div class="progress-fill" id="progressFill"></div>
+                            </div>
+                            <div class="progress-caption">
+                                <span id="progressMessage"></span>
+                                <span class="progress-step" id="progressStep"></span>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+</div><!-- // .wrapper -->
+
+<script>
+    // 서버가 적재를 받을 수 있는 상태인가. 아래 상태 조회가 정하고 setFile 이 존중한다.
+    // 버튼만 잠그는 방식으로는 막히지 않는다. 파일을 고르면 setFile 이 도로 열어 준다.
+    // 조회 응답보다 파일 선택이 빠를 수 있으므로 false 로 시작한다.
+    let serverReady = false;
+
+    fetch('/api/mcp/servers/rag-server')
+        .then(r => r.json())
+        .then(s => {
+            const banner    = document.getElementById('serverBanner');
+            const uploadBtn = document.getElementById('uploadBtn');
+            if (s && s.status === 'CONNECTED') {
+                banner.className = 'server-banner ok';
+                banner.textContent = '● MCP 서버 연결됨 - 적재 가능';
+                serverReady = true;
+                // 조회보다 파일 선택이 빨랐으면 여기서 열어 준다.
+                uploadBtn.disabled = !selectedFile;
+            } else {
+                banner.className = 'server-banner ng';
+                // 인증 실패와 그 밖의 연결 실패는 고칠 곳이 다르다. authFailed 는 서버가 보낸
+                // JSON-RPC 오류 코드로 판정된 값이다(문자열 매칭이 아니다).
+                // 여기서 [연결] 을 누르라고 안내하면 인증 문제에서는 틀린 안내가 된다.
+                banner.textContent = s && s.authFailed
+                    ? '● 인증 실패 - 서버와 클라이언트의 MCP_API_KEY 를 같은 값으로 설정한 뒤 재기동하세요'
+                    : '● MCP 서버 연결 안 됨 - 채팅 화면에서 서버를 먼저 연결하세요';
+                if (s && s.lastError) {
+                    banner.title = s.lastError;
+                }
+                serverReady = false;
+                uploadBtn.disabled = true;
+                uploadBtn.title = s && s.authFailed
+                    ? 'MCP_API_KEY 설정 후 사용 가능'
+                    : 'MCP 서버 연결 후 사용 가능';
+            }
+        })
+        .catch(() => {
+            const banner = document.getElementById('serverBanner');
+            banner.className = 'server-banner ng';
+            banner.textContent = '● 서버 상태 확인 실패';
+
+            // 연결 여부를 모르는 상태에서 적재를 시작하게 두지 않는다.
+            // 등록되지 않은 이름이면 서버가 본문 없는 200 을 주므로 r.json() 이
+            // 실패해 이 분기로 온다.
+            serverReady = false;
+            const btn = document.getElementById('uploadBtn');
+            btn.disabled = true;
+            btn.title = '서버 상태를 확인할 수 없어 사용할 수 없습니다';
+        });
+
+    const dropZone         = document.getElementById('dropZone');
+    const fileInput        = document.getElementById('fileInput');
+    const uploadBtn        = document.getElementById('uploadBtn');
+    const selectedFileName = document.getElementById('selectedFileName');
+    const statusBox        = document.getElementById('statusBox');
+    const progressPanel    = document.getElementById('progressPanel');
+    const progressFill     = document.getElementById('progressFill');
+    const progressMessage  = document.getElementById('progressMessage');
+    const progressStep     = document.getElementById('progressStep');
+
+    let selectedFile = null;
+
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    dropZone.addEventListener('dragover', e => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        if (files.length) setFile(files[0]);
+    });
+
+    fileInput.addEventListener('change', () => {
+        if (fileInput.files.length) setFile(fileInput.files[0]);
+    });
+
+    function setFile(file) {
+        selectedFile = file;
+        selectedFileName.textContent = file.name + ' (' + formatSize(file.size) + ')';
+        uploadBtn.disabled = !serverReady;
+    }
+
+    function formatSize(bytes) {
+        if (bytes < 1024)    return bytes + ' B';
+        if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+
+    async function startUpload() {
+        const file = selectedFile || fileInput.files[0];
+        if (!file) return;
+
+        uploadBtn.disabled = true;
+        setStatus('loading', '임베딩 중입니다. 파일 크기에 따라 시간이 걸릴 수 있습니다');
+        resetProgress();
+
+        // 진행률 스트림을 고르는 키. 같은 값이 MCP progressToken 으로 서버에 전달된다.
+        const jobId = newJobId();
+
+        // POST 보다 먼저 연다. 1단계(텍스트 추출)가 POST 응답을 기다리는 사이에 오기 때문이다.
+        // 늦게 열려도 레지스트리가 replay 로 지난 이벤트를 돌려주므로
+        // 유실되지는 않는다(EgovIngestProgressRegistry.REPLAY_SIZE).
+        const progress = openProgressStream(jobId);
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // jobId 는 쿼리 파라미터로 보낸다. FormData 의 문자열 필드는 Content-Type 이 없어
+        // WebFlux 가 String 파라미터로 디코딩하지 못하고 415 를 낸다.
+        const url = '/api/documents/ingest?jobId=' + encodeURIComponent(jobId);
+
+        try {
+            const res  = await fetch(url, { method: 'POST', body: formData });
+            const data = await res.json();
+
+            if (!res.ok || data.success === false) {
+                setStatus('failure', data.message || '적재 실패');
+            } else {
+                setStatus('success', data.message || '임베딩이 완료되었습니다!');
+            }
+        } catch (e) {
+            setStatus('failure', '네트워크 오류: ' + e.message);
+        } finally {
+            // EventSource 는 스트림이 닫히면 스스로 재접속한다. 판정은 위의 응답으로 끝났으므로
+            // 여기서 반드시 끊는다. 끊지 않으면 적재가 끝난 뒤에도 재접속을 반복한다.
+            if (progress) progress.close();
+            uploadBtn.disabled = !serverReady;
+        }
+    }
+
+    /**
+     * 적재 작업 ID 를 만든다.
+     *
+     * crypto.randomUUID() 는 보안 컨텍스트(https 또는 localhost)에서만 있다. 다른 PC 에서
+     * http + IP 로 접속하면 undefined 이므로 대체 경로를 둔다. 충돌만 피하면 되는 값이고
+     * 암호학적 강도는 필요하지 않다. 서버는 영문·숫자·하이픈 64자 이내만 받는다.
+     */
+    function newJobId() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            return window.crypto.randomUUID();
+        }
+        return 'ingest-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+    }
+
+    /**
+     * 진행률 SSE 를 연다.
+     *
+     * 열리지 않거나 한 건도 오지 않아도 적재는 정상 진행되며,
+     * 성공·실패는 POST 응답이 판정한다. 진행률이 0건인 정상 경로가 있다.
+     * 변경된 페이지가 없어 임베딩을 생략한 경우, 서버가 파이프라인 전에 거부한 경우.
+     * 그래서 실패를 화면에 띄우지 않고 콘솔에만 남긴다.
+     */
+    function openProgressStream(jobId) {
+        if (typeof EventSource !== 'function') return null;
+
+        const source = new EventSource('/api/documents/ingest/progress/' + encodeURIComponent(jobId));
+
+        source.onmessage = event => {
+            try {
+                renderProgress(JSON.parse(event.data));
+            } catch (e) {
+                console.warn('진행률 파싱 실패', e);
+            }
+        };
+        source.onerror = () => console.debug('진행률 스트림 끊김 - 적재 자체에는 영향 없음');
+
+        return source;
+    }
+
+    /**
+     * 진행률 한 건을 그린다.
+     *
+     * 단계 이름을 하드코딩하지 않는다. message 와 total 을 서버가 보내므로 파이프라인
+     * 단계가 늘거나 문구가 바뀌어도 이 화면은 고치지 않는다.
+     */
+    function renderProgress(event) {
+        progressPanel.classList.add('visible');
+        progressMessage.textContent = event.message || '';
+
+        const total = Number(event.total);
+        const done  = Number(event.progress);
+        if (total > 0 && isFinite(done)) {
+            const percent = Math.max(0, Math.min(100, (done / total) * 100));
+            progressFill.style.width = percent + '%';
+            progressStep.textContent = done + ' / ' + total;
+        }
+    }
+
+    function resetProgress() {
+        progressPanel.classList.remove('visible');
+        progressFill.style.width = '0';
+        progressMessage.textContent = '';
+        progressStep.textContent = '';
+    }
+
+    function setStatus(type, msg) {
+        statusBox.className = 'status-box ' + type;
+        if (type === 'loading') {
+            statusBox.innerHTML = msg + '<span class="loading-dots"></span>';
+        } else {
+            statusBox.textContent = msg;
+        }
+    }
+</script>
+</body>
+</html>

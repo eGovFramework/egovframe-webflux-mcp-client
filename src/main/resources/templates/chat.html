@@ -1,0 +1,1681 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP 채팅 클라이언트</title>
+    <script src="/js/marked.min.js"></script>
+    <script src="/js/purify.min.js"></script>
+    <style>
+        /*
+           KRDS 토큰 (참조 프로젝트 krds_tokens.css 기반)
+        */
+        :root {
+            --primary-50:  #256ef4;
+            --primary-60:  #0b50d0;
+            --primary-5:   #ecf2fe;
+            --gray-0:      #ffffff;
+            --gray-5:      #f4f5f6;
+            --gray-10:     #e6e8ea;
+            --gray-20:     #cdd1d5;
+            --gray-30:     #b1b8be;
+            --gray-40:     #8a949e;
+            --gray-50:     #6d7882;
+            --gray-60:     #58616a;
+            --gray-70:     #464c53;
+            --gray-80:     #33363d;
+            --gray-90:     #1e2124;
+            --success-50:  #228738;
+            --success-5:   #eaf6ec;
+            --danger-50:   #de3412;
+            --danger-5:    #fdefec;
+            --warning-50:  #9e6a00;
+            --warning-5:   #fff3db;
+
+            --font:        'Malgun Gothic', 'Noto Sans KR', -apple-system, sans-serif;
+            --header-h:    56px;
+            --lnb-w:       248px;
+            --radius:      4px;
+            --shadow:      0 1px 4px rgba(0,0,0,.08);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font);
+            font-size: 14px;
+            color: var(--gray-90);
+            line-height: 1.5;
+        }
+
+        /*
+           WRAPPER (전체 페이지 컨테이너)
+        */
+        .wrapper {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /*
+           #krds-header (레퍼런스 구조 일치)
+        */
+        #krds-header {
+            height: var(--header-h);
+            background: var(--gray-0);
+            border-bottom: 1px solid var(--gray-10);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 16px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 0;
+            z-index: 200;
+        }
+
+        #krds-header .left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: 0;
+        }
+
+        .header-service-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--gray-90);
+        }
+
+        .header-divider {
+            width: 1px; height: 18px;
+            background: var(--gray-20);
+        }
+
+        .header-page-name {
+            font-size: 13px;
+            color: var(--gray-50);
+        }
+
+        /*
+           #wrap → #container → .inner.in-between.layout
+           (레퍼런스 index.html 구조 일치)
+        */
+        #wrap {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        #container.main-container {
+            height: calc(100vh - var(--header-h));
+        }
+
+        .inner.in-between {
+            display: flex;
+            align-items: flex-start;
+            height: 100%;
+        }
+
+        /*
+           nav.krds-side-navigation (레퍼런스 구조 일치)
+        */
+        .krds-side-navigation {
+            flex-shrink: 0;
+            width: var(--lnb-w-user, var(--lnb-w));
+            height: 100%;
+            background: var(--gray-0);
+            border-right: 1px solid var(--gray-10);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .krds-side-navigation::-webkit-scrollbar { width: 4px; }
+        .krds-side-navigation::-webkit-scrollbar-track { background: transparent; }
+        .krds-side-navigation::-webkit-scrollbar-thumb {
+            background: var(--gray-20);
+            border-radius: 2px;
+        }
+
+        /* 사이드바 너비 조절 손잡이 */
+        .lnb-resizer {
+            flex-shrink: 0;
+            width: 5px;
+            height: 100%;
+            background: var(--gray-5);
+            cursor: col-resize;
+            transition: background .15s;
+            /* 터치와 펜에서 브라우저 스크롤 제스처가 먼저 먹지 않게 한다 */
+            touch-action: none;
+        }
+
+        .lnb-resizer:hover,
+        .lnb-resizer.dragging { background: var(--primary-50); }
+
+        .lnb-resizer:focus-visible {
+            outline: 2px solid var(--primary-50);
+            outline-offset: -2px;
+        }
+
+        /* 끄는 동안 본문 글자가 선택되는 것을 막는다 */
+        body.lnb-resizing {
+            cursor: col-resize;
+            user-select: none;
+        }
+
+        /* 액션 버튼 영역 */
+        .lnb-actions {
+            padding: 14px 12px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            border-bottom: 1px solid var(--gray-10);
+        }
+
+        /* LNB 섹션 헤더 */
+        .lnb-section {
+            padding: 0;
+        }
+
+        .lnb-section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px 6px;
+        }
+
+        .lnb-section-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--gray-40);
+            letter-spacing: .8px;
+            text-transform: uppercase;
+        }
+
+        .lnb-icon-btn {
+            background: none;
+            border: none;
+            font-size: 14px;
+            color: var(--gray-40);
+            cursor: pointer;
+            padding: 3px 5px;
+            border-radius: var(--radius);
+            line-height: 1;
+            transition: background .15s, color .15s;
+        }
+        .lnb-icon-btn:hover { background: var(--gray-5); color: var(--gray-70); }
+
+        /* lnb-list / lnb-item (레퍼런스 클래스 사용) */
+        .lnb-list {
+            list-style: none;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .lnb-item {
+            border-top: 1px solid var(--gray-10);
+        }
+
+        /* 세션 목록 컨테이너: flex-grow so it fills remaining LNB space */
+        .lnb-sessions-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sessions-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 0 8px;
+        }
+        .sessions-scroll::-webkit-scrollbar { width: 3px; }
+        .sessions-scroll::-webkit-scrollbar-thumb { background: var(--gray-20); border-radius: 2px; }
+
+        /* session-item (lnb-subitem 스타일) */
+        .session-item {
+            display: flex;
+            align-items: center;
+            padding: 0 8px 0 12px;
+            border-radius: 0;
+            cursor: default;
+            gap: 2px;
+        }
+
+        .session-content {
+            flex: 1;
+            min-width: 0;
+            padding: 7px 8px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: background .15s;
+        }
+        .session-item:hover .session-content { background: var(--gray-5); }
+        .session-item.active .session-content { background: var(--primary-5); }
+
+        .session-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--gray-80);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 2px;
+        }
+        .session-item.active .session-title {
+            color: var(--primary-50);
+            font-weight: 700;
+        }
+
+        .session-time {
+            font-size: 11px;
+            color: var(--gray-40);
+        }
+        .session-item.active .session-time { color: var(--primary-50); opacity: .7; }
+
+        .edit-session-btn,
+        .delete-session-btn {
+            background: none;
+            border: none;
+            color: var(--gray-30);
+            cursor: pointer;
+            padding: 4px 5px;
+            border-radius: var(--radius);
+            opacity: 0;
+            transition: opacity .15s, background .15s, color .15s;
+            flex-shrink: 0;
+            font-size: 12px;
+            line-height: 1;
+        }
+        .delete-session-btn { font-size: 14px; }
+        .session-item:hover  .edit-session-btn,
+        .session-item:hover  .delete-session-btn  { opacity: 1; }
+        .session-item.active .edit-session-btn,
+        .session-item.active .delete-session-btn  { opacity: 1; color: var(--primary-50); }
+        .edit-session-btn:hover  { background: var(--gray-10); color: var(--gray-70); }
+        .delete-session-btn:hover { background: var(--danger-5); color: var(--danger-50); }
+
+        .session-title-input {
+            width: 100%;
+            font-size: 13px;
+            font-weight: 600;
+            border: 1px solid var(--primary-50);
+            border-radius: var(--radius);
+            padding: 3px 6px;
+            background: var(--gray-0);
+            color: var(--gray-90);
+            outline: none;
+            box-sizing: border-box;
+            font-family: var(--font);
+        }
+
+        /* MCP 서버 아이템 */
+        .mcp-servers-wrap {
+            padding: 4px 12px 8px;
+        }
+
+        .mcp-server-item {
+            background: var(--gray-5);
+            border: 1px solid var(--gray-10);
+            border-radius: var(--radius);
+            padding: 8px 10px;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+
+        .mcp-server-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            /* 사이드바를 좁히면 버튼이 아랫줄로 내려간다 */
+            flex-wrap: wrap;
+            gap: 4px 6px;
+            margin-bottom: 4px;
+        }
+
+        .mcp-server-name {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+            color: var(--gray-80);
+            /* min-width 가 없으면 이름 길이만큼 자리를 차지해 버튼을 밖으로 밀어낸다 */
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        /* 서버 이름은 줄바꿈 대신 말줄임으로 처리한다. 전체 이름은 title 로 본다 */
+        .server-name-text {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .status-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .status-dot.connected    { background: #34c774; }
+        .status-dot.disconnected { background: var(--gray-30); }
+        .status-dot.failed       { background: var(--danger-50); }
+
+        .server-type-badge {
+            flex-shrink: 0;
+            font-size: 10px;
+            color: var(--gray-50);
+            background: var(--gray-10);
+            padding: 1px 5px;
+            border-radius: 3px;
+        }
+
+        .mcp-action-btn {
+            font-size: 11px;
+            padding: 3px 8px;
+            border: none;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-weight: 600;
+            font-family: var(--font);
+            transition: opacity .15s;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .mcp-action-btn:hover    { opacity: .85; }
+        .mcp-action-btn:disabled { opacity: .4; cursor: not-allowed; }
+        .mcp-action-btn.connect    { background: var(--primary-50); color: #fff; }
+        .mcp-action-btn.disconnect { background: var(--gray-60);    color: #fff; }
+        .mcp-action-btn.retry      { background: #c87941;           color: #fff; }
+
+        .restrict-toggle {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            color: var(--gray-50);
+            cursor: pointer;
+            margin-top: 5px;
+            user-select: none;
+        }
+        .restrict-toggle input { cursor: pointer; accent-color: #c87941; }
+        .restrict-toggle.allowed { color: #c87941; font-weight: 600; }
+
+        .mcp-server-tools {
+            color: var(--gray-40);
+            font-size: 11px;
+            line-height: 1.4;
+            /* getCurrentDateTimeWithZone 처럼 띄어쓰기가 없는 이름은
+               끊을 자리가 없어 카드 밖으로 넘친다 */
+            overflow-wrap: anywhere;
+        }
+        .mcp-server-error { color: var(--danger-50); font-size: 10px; margin-top: 3px; word-break: break-word; }
+        .auth-failed-badge {
+            display: inline-block; margin-right: 4px; padding: 0 4px;
+            border-radius: 3px; background: var(--danger-50); color: #fff;
+            font-size: 10px; font-weight: 700; white-space: nowrap;
+        }
+
+        /*
+           .contents → .conts-area (레퍼런스 구조 일치)
+        */
+        .contents {
+            flex: 1;
+            min-width: 0;
+            background: var(--gray-5);
+            height: 100%;
+            overflow-y: auto;
+        }
+
+        .conts-area {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            padding: 20px 24px;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* breadcrumb (레퍼런스 구조 일치) */
+        .krds-breadcrumb-wrap {
+            flex-shrink: 0;
+        }
+
+        .krds-breadcrumb-wrap .breadcrumb {
+            display: flex;
+            list-style: none;
+            gap: 0;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .krds-breadcrumb-wrap .breadcrumb li {
+            display: flex;
+            align-items: center;
+            font-size: 13px;
+            color: var(--gray-50);
+        }
+
+        .krds-breadcrumb-wrap .breadcrumb li + li::before {
+            content: '/';
+            margin: 0 6px;
+            color: var(--gray-20);
+        }
+
+        .krds-breadcrumb-wrap .breadcrumb li a,
+        .krds-breadcrumb-wrap .breadcrumb li a.txt {
+            color: var(--primary-50);
+            text-decoration: none;
+            font-size: 13px;
+        }
+        .krds-breadcrumb-wrap .breadcrumb li a:hover { text-decoration: underline; }
+
+        /* heading-large (레퍼런스 구조 일치) */
+        h2.heading-large {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--gray-90);
+            margin-bottom: 0;    /* gap 으로 처리 */
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .title-edit-btn {
+            background: none;
+            border: none;
+            font-size: 15px;
+            cursor: pointer;
+            color: var(--gray-40);
+            padding: 3px 6px;
+            border-radius: var(--radius);
+            flex-shrink: 0;
+            transition: color .15s, background .15s;
+        }
+        .title-edit-btn:hover { color: var(--primary-50); background: var(--primary-5); }
+
+        .title-edit-input {
+            flex: 1;
+            min-width: 0;
+            font-size: 19px;
+            font-weight: 700;
+            border: 1.5px solid var(--primary-50);
+            border-radius: var(--radius);
+            padding: 4px 8px;
+            outline: none;
+            color: var(--gray-90);
+            background: var(--gray-0);
+            font-family: var(--font);
+        }
+
+        /* form-group / search-wrap (레퍼런스 구조 일치) */
+        .form-group {
+            flex-shrink: 0;
+        }
+
+        .search-wrap {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            background: var(--gray-0);
+            border: 1px solid var(--gray-10);
+            border-radius: var(--radius);
+            padding: 12px 16px;
+            box-shadow: var(--shadow);
+        }
+
+        .search-wrap label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--gray-60);
+            white-space: nowrap;
+        }
+
+        /* krds-form-select (레퍼런스 클래스 일치) */
+        .krds-form-select {
+            padding: 7px 10px;
+            border: 1px solid var(--gray-20);
+            border-radius: var(--radius);
+            background: var(--gray-0);
+            font-size: 13px;
+            font-family: var(--font);
+            color: var(--gray-90);
+            min-width: 200px;
+            cursor: pointer;
+            outline: none;
+            transition: border-color .15s;
+        }
+        .krds-form-select:focus { border-color: var(--primary-50); }
+
+        .model-status {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 9px;
+            border-radius: var(--radius);
+        }
+        .model-status.success { background: var(--success-5); color: var(--success-50); }
+        .model-status.warning { background: var(--warning-5); color: var(--warning-50); }
+        .model-status.error   { background: var(--danger-5);  color: var(--danger-50); }
+
+        .rag-mode-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--gray-50);
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .rag-mode-toggle input { cursor: pointer; accent-color: var(--primary-50); }
+
+        /* 채팅 영역 */
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--gray-0);
+            border: 1px solid var(--gray-10);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            min-height: 300px;
+        }
+        .chat-container::-webkit-scrollbar { width: 6px; }
+        .chat-container::-webkit-scrollbar-track { background: transparent; }
+        .chat-container::-webkit-scrollbar-thumb { background: var(--gray-20); border-radius: 3px; }
+
+        .message {
+            margin-bottom: 14px;
+            padding: 10px 14px;
+            border-radius: var(--radius);
+            max-width: 78%;
+            font-size: 14px;
+            line-height: 1.65;
+        }
+        .user-message {
+            background: var(--primary-50);
+            color: #fff;
+            margin-left: auto;
+            text-align: right;
+        }
+        .ai-message {
+            background: var(--gray-5);
+            color: var(--gray-90);
+            border: 1px solid var(--gray-10);
+        }
+
+        .ai-message p { margin-bottom: 8px; }
+        .ai-message p:last-child { margin-bottom: 0; }
+        .ai-message ul, .ai-message ol { padding-left: 20px; margin-bottom: 8px; }
+        .ai-message code { background: var(--gray-10); padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+        .ai-message pre {
+            background: var(--gray-5);
+            border: 1px solid var(--gray-10);
+            border-radius: var(--radius);
+            padding: 12px;
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+        .ai-message pre code { background: none; padding: 0; }
+
+        /* 입력 영역 */
+        .input-container {
+            flex-shrink: 0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            padding: 14px 16px;
+            border-top: 1px solid var(--gray-10);
+        }
+
+        /* krds-input (레퍼런스 클래스 일치) */
+        .krds-input {
+            flex: 1;
+            padding: 9px 13px;
+            border: 1px solid var(--gray-20);
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-family: var(--font);
+            color: var(--gray-90);
+            background: var(--gray-0);
+            outline: none;
+            transition: border-color .15s;
+        }
+        .krds-input:focus { border-color: var(--primary-50); }
+        .krds-input::placeholder { color: var(--gray-30); }
+
+        /* krds-btn (레퍼런스 클래스 일치) */
+        .krds-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px 18px;
+            border: 1px solid var(--gray-20);
+            border-radius: var(--radius);
+            background: var(--gray-0);
+            font-size: 13px;
+            font-weight: 600;
+            font-family: var(--font);
+            color: var(--gray-80);
+            cursor: pointer;
+            transition: background .15s, border-color .15s;
+            white-space: nowrap;
+            text-decoration: none;
+        }
+        .krds-btn:hover { background: var(--gray-5); }
+
+        .krds-btn.primary {
+            background: var(--primary-50);
+            color: #fff;
+            border-color: var(--primary-50);
+        }
+        .krds-btn.primary:hover { background: var(--primary-60); border-color: var(--primary-60); }
+        .krds-btn.primary:disabled { background: var(--gray-20); border-color: var(--gray-20); color: var(--gray-50); cursor: not-allowed; }
+
+        .krds-btn.medium { padding: 9px 20px; font-size: 14px; }
+        .krds-btn.full   { width: 100%; justify-content: center; }
+
+        /* 응답 상태 인디케이터 (버블보다 작고 subtle) */
+        .ai-status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 2px;
+            font-size: 12px;
+            color: var(--gray-50);
+        }
+
+        .ai-status-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--gray-30);
+            flex-shrink: 0;
+            animation: status-pulse 1.4s ease-in-out infinite;
+        }
+        .ai-status-dot.tool-calling { background: var(--primary-50); }
+
+        @keyframes status-pulse {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.3; }
+        }
+
+        /* 로딩 스피너 (MCP 서버 미연결 경고 후 대기용) */
+        .loading {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid var(--gray-10);
+            border-top-color: var(--primary-50);
+            border-radius: 50%;
+            animation: spin .8s linear infinite;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /*
+           반응형
+        */
+        @media (max-width: 900px) {
+            :root { --lnb-w: 220px; }
+            .conts-area { padding: 16px; }
+        }
+        @media (max-width: 640px) {
+            :root { --lnb-w: 0px; }
+            .krds-side-navigation { display: none; }
+            .lnb-resizer { display: none; }
+            .conts-area { padding: 14px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="wrapper">
+
+    <!-- #krds-header (레퍼런스 index.html 구조 일치) -->
+    <header id="krds-header">
+        <div class="left">
+            <span class="header-service-name">MCP 채팅 클라이언트</span>
+        </div>
+        <div class="header-divider"></div>
+        <span class="header-page-name">AI 채팅</span>
+    </header>
+
+    <!-- #wrap (레퍼런스 index.html 구조 일치) -->
+    <main id="wrap">
+        <div id="container" class="main-container">
+            <div class="inner in-between layout">
+
+                <!-- nav.krds-side-navigation (레퍼런스 구조 일치) -->
+                <nav class="krds-side-navigation" aria-label="좌측 메뉴">
+
+                    <!-- 액션 버튼 -->
+                    <div class="lnb-actions">
+                        <button class="krds-btn primary medium full" onclick="createNewSession()">+ 새 채팅</button>
+                        <a class="krds-btn medium full" href="/ingest">&#8593; 문서 적재</a>
+                    </div>
+
+                    <ul class="lnb-list">
+
+                        <!-- MCP 서버 섹션 -->
+                        <li class="lnb-item">
+                            <div class="lnb-section-header">
+                                <span class="lnb-section-title">MCP 서버</span>
+                                <button class="lnb-icon-btn" onclick="loadServerStatuses()" title="새로고침">&#8635;</button>
+                            </div>
+                            <div class="mcp-servers-wrap">
+                                <div id="mcp-servers-list">
+                                    <div style="color:var(--gray-40);font-size:12px;padding:4px 0;">로딩 중...</div>
+                                </div>
+                            </div>
+                        </li>
+
+                        <!-- 채팅 목록 섹션 -->
+                        <li class="lnb-item lnb-sessions-item">
+                            <div class="lnb-section-header">
+                                <span class="lnb-section-title">채팅 목록</span>
+                            </div>
+                            <div class="sessions-scroll">
+                                <div id="sessions-list"></div>
+                            </div>
+                        </li>
+
+                    </ul>
+                </nav>
+                <!-- // nav.krds-side-navigation -->
+
+                <!-- 사이드바 너비 조절 손잡이. 끌거나 화살표 키로 폭을 바꾼다 -->
+                <div id="lnb-resizer" class="lnb-resizer"
+                     role="separator" aria-orientation="vertical" tabindex="0"
+                     aria-label="사이드바 너비 조절" title="끌어서 조절, 두 번 누르면 기본값"></div>
+
+                <!-- .contents (레퍼런스 구조 일치) -->
+                <div class="contents">
+                    <div class="conts-area">
+
+                        <!-- breadcrumb (레퍼런스 구조 일치) -->
+                        <nav class="krds-breadcrumb-wrap" aria-label="브레드크럼" id="breadcrumb">
+                            <ol class="breadcrumb">
+                                <li class="home"><a href="/" class="txt">홈</a></li>
+                                <li>채팅</li>
+                            </ol>
+                        </nav>
+
+                        <!-- heading-large (레퍼런스 구조 일치): 현재 세션 제목 -->
+                        <h2 class="heading-large" id="current-session-title">
+                            <span id="current-session-title-text">새 채팅</span>
+                            <button class="title-edit-btn" id="title-edit-btn"
+                                    onclick="startTitleEdit()" title="제목 수정"
+                                    style="visibility:hidden;">&#x270E;</button>
+                        </h2>
+
+                        <!-- form-group / search-wrap (레퍼런스 구조 일치): 모델 선택 -->
+                        <div class="form-group" id="model-selection" style="display:none;">
+                            <div class="search-wrap">
+                                <label for="model-select">모델</label>
+                                <select id="model-select" class="krds-form-select" onchange="onModelChange()">
+                                    <option value="">모델을 선택하세요...</option>
+                                </select>
+                                <span id="model-status" class="model-status"></span>
+                                <label class="rag-mode-toggle"
+                                       title="켜면 문서 검색을 먼저 수행합니다. 대화 중에도 켜고 끌 수 있습니다.">
+                                    <input type="checkbox" id="rag-mode" checked>
+                                    문서 기반으로 답하기
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- 채팅 영역 -->
+                        <div class="chat-area">
+                            <div class="chat-container" id="chat-container"></div>
+                            <div class="input-container">
+                                <input type="text" id="message-input" class="krds-input"
+                                       placeholder="메시지를 입력하세요..." onkeydown="handleKeyPress(event)">
+                                <button id="send-btn" class="krds-btn primary medium" onclick="sendMessage()">전송</button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+                <!-- // .contents -->
+
+            </div>
+        </div>
+    </main>
+
+</div><!-- // .wrapper -->
+
+<script>
+    let currentSessionId = null;
+    let availableModels   = [];
+    let selectedModel     = '';
+
+    /* LLM 백엔드로 질의가 가능한 상태인지 체크용
+       보낼 수 없으면 입력창을 잠근다. */
+    let chatBackendReady = true;
+
+    // MCP 서버 상태
+
+    /*
+       RAG 지시문을 제공하는 문서 서버의 이름.
+       클라이언트 EgovRagPromptProvider.SERVER_NAME 과 같아야 한다.
+       이 서버가 CONNECTED 여야 지시문을 받을 수 있고 searchDocuments 도구도 쓸 수 있다.
+    */
+    const RAG_SERVER_NAME = 'rag-server';
+
+    function loadServerStatuses() {
+        fetch('/api/mcp/servers')
+            .then(r => r.json())
+            .then(servers => {
+                renderServerList(servers);
+                updateRagAvailability(servers);
+            })
+            .catch(() => {
+                document.getElementById('mcp-servers-list').innerHTML =
+                    '<div style="color:var(--danger-50);font-size:12px;">상태 조회 실패</div>';
+                updateRagAvailability([]);   // 상태를 모르면 켤 수 없게 둔다
+            });
+    }
+
+    function renderServerList(servers) {
+        const list = document.getElementById('mcp-servers-list');
+        if (!servers || servers.length === 0) {
+            list.innerHTML = '<div style="color:var(--gray-40);font-size:12px;">등록된 서버 없음</div>';
+            return;
+        }
+        list.innerHTML = servers.map(s => buildServerItem(s)).join('');
+    }
+
+    /*
+       문서 서버가 연결돼 있을 때만 'RAG 지시문' 체크박스를 쓸 수 있게 한다.
+
+       연결이 없으면 지시문도 searchDocuments 도구도 없으므로 체크해 봐야 아무 일도 일어나지 않는다
+       (EgovRagPromptProvider 가 연결을 먼저 확인하고 null 을 돌려준다).
+       그 사실을 사용자가 알 길이 없어 "켰는데 왜 검색을 안 하지" 가 되므로, 아예 못 켜게 막는다.
+
+       체크 상태 자체는 건드리지 않는다. 서버가 다시 연결되면 그대로 쓸 수 있어야 한다.
+    */
+    function updateRagAvailability(servers) {
+        const box   = document.getElementById('rag-mode');
+        const label = box.closest('.rag-mode-toggle');
+        const ready = (servers || []).some(
+                s => s.name === RAG_SERVER_NAME && s.status === 'CONNECTED');
+
+        box.disabled = !ready;
+        label.style.opacity = ready ? '1' : '0.5';
+
+        // 인증 때문에 막힌 경우에는 [연결] 을 누르라고 안내하면 안 된다. 눌러도 계속 실패한다.
+        const authBlocked = (servers || []).some(
+                s => s.name === RAG_SERVER_NAME && s.authFailed);
+        label.title = ready
+            ? '켜면 문서 검색을 먼저 수행합니다. 대화 중에도 켜고 끌 수 있습니다.'
+            : authBlocked
+            ? `'${RAG_SERVER_NAME}' 인증 실패 - 서버와 클라이언트의 MCP_API_KEY 를 같은 값으로 설정한 뒤 재기동하세요.`
+            : `'${RAG_SERVER_NAME}' 서버가 연결되어야 사용할 수 있습니다. 사이드바에서 연결하세요.`;
+    }
+
+    /*
+       s.name 은 이스케이프 없이 속성과 onclick 에 넣는다(id="srv-${s.name}" 등).
+       값이 application.yml 의 연결 이름이라 우리가 적은 글자이기 때문이다.
+
+       원격 서버가 보내는 값은 s.lastError(오류 메시지)와 s.tools(도구 이름)이고,
+       둘은 무엇이 올지 통제할 수 없으므로 반드시 escapeHtml 을 거친다.
+    */
+    function buildServerItem(s) {
+        const statusClass = s.status === 'CONNECTED' ? 'connected'
+                          : s.status === 'FAILED'    ? 'failed'
+                          : 'disconnected';
+
+        const toolsText = s.tools && s.tools.length > 0
+            ? s.tools.join(', ')
+            : '도구 없음';
+
+        const actionBtn = s.status === 'CONNECTED'
+            ? `<button class="mcp-action-btn disconnect"
+                       onclick="disconnectServer('${s.name}')" id="btn-${s.name}">해제</button>`
+            : s.status === 'FAILED'
+            ? `<button class="mcp-action-btn retry"
+                       onclick="connectServer('${s.name}')" id="btn-${s.name}">재시도</button>`
+            : `<button class="mcp-action-btn connect"
+                       onclick="connectServer('${s.name}')" id="btn-${s.name}">연결</button>`;
+
+        /* 실패 사유를 구분해 보여준다.
+           authFailed 는 서버가 보낸 JSON-RPC 오류 코드로 판정된 값이다(문자열 매칭이 아니다).
+           구분이 필요한 이유는 고칠 곳이 다르기 때문이다. 인증이면 환경변수 MCP_API_KEY,
+           그 밖이면 서버를 띄우고 [연결]. 문구를 하나로 두면 사용자를 반대편으로 보낸다. */
+        const errorText = s.authFailed
+            ? `인증 실패 - 서버와 클라이언트의 MCP_API_KEY 가 같은지 확인하세요. ${s.lastError || ''}`
+            : (s.lastError || '');
+        const errorHtml = errorText
+            ? `<div class="mcp-server-error" title="${escapeHtml(errorText)}">
+                   ${s.authFailed ? '<span class="auth-failed-badge">인증</span>' : ''}
+                   ${escapeHtml(errorText.substring(0, 60))}${errorText.length > 60 ? '…' : ''}
+               </div>`
+            : '';
+
+        const writeToggleHtml = s.status === 'CONNECTED'
+            ? `<label class="restrict-toggle ${s.restrictedAllowed ? 'allowed' : ''}"
+                      title="위험·제한 작업 도구 허용 (데이터 변경·외부 연동 도구 포함)">
+                   <input type="checkbox" ${s.restrictedAllowed ? 'checked' : ''}
+                          onchange="setRestrictedAllowed('${s.name}', this.checked)">
+                   위험 작업 허용
+               </label>`
+            : '';
+
+        return `
+        <div class="mcp-server-item" id="srv-${s.name}">
+            <div class="mcp-server-top">
+                <div class="mcp-server-name">
+                    <span class="status-dot ${statusClass}"></span>
+                    <span class="server-name-text"
+                          title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</span>
+                    <span class="server-type-badge">${escapeHtml(s.type)}</span>
+                </div>
+                ${actionBtn}
+            </div>
+            <div class="mcp-server-tools">${escapeHtml(toolsText)}</div>
+            ${writeToggleHtml}
+            ${errorHtml}
+        </div>`;
+    }
+
+    function connectServer(name) {
+        const btn = document.getElementById('btn-' + name);
+        if (btn) { btn.disabled = true; btn.textContent = '연결 중...'; }
+        fetch(`/api/mcp/servers/${name}/connect`, { method: 'POST' })
+            .then(r => r.json())
+            .then(updated => {
+                // 먼저 해당 항목만 갈아끼워 즉시 반영하고,
+                const container = document.getElementById('srv-' + name);
+                if (container) container.outerHTML = buildServerItem(updated);
+
+                // 전체 상태를 다시 조회해 RAG 체크박스 가용성까지 갱신한다.
+                // 이 항목만 고치면 updateRagAvailability 가 불리지 않아, 서버를 다시 연결해도
+                // 체크박스가 비활성으로 남는다(페이지 새로고침을 해야 풀리던 문제).
+                loadServerStatuses();
+            })
+            .catch(() => loadServerStatuses());
+    }
+
+    function setRestrictedAllowed(name, allowed) {
+        fetch(`/api/mcp/servers/${name}/restricted/${allowed}`, { method: 'POST' })
+            .then(r => r.json())
+            .then(updated => {
+                const container = document.getElementById('srv-' + name);
+                if (container) container.outerHTML = buildServerItem(updated);
+            })
+            .catch(() => loadServerStatuses());
+    }
+
+    function disconnectServer(name) {
+        const btn = document.getElementById('btn-' + name);
+        if (btn) { btn.disabled = true; btn.textContent = '해제 중...'; }
+        fetch(`/api/mcp/servers/${name}/disconnect`, { method: 'POST' })
+            .then(() => loadServerStatuses())
+            .catch(() => loadServerStatuses());
+    }
+
+    // 모델 선택
+
+    function loadOllamaModels() {
+        const modelSelection  = document.getElementById('model-selection');
+        const modelSelect     = document.getElementById('model-select');
+        const modelStatus     = document.getElementById('model-status');
+
+        modelStatus.textContent = '모델 목록을 불러오는 중...';
+        modelStatus.className   = 'model-status';
+
+        fetch('/api/ollama/models')
+            .then(r => r.json())
+            .then(data => {
+                const backend        = data.activeChatBackend || 'ollama';
+                const isOllamaBackend = backend === 'ollama';
+
+                availableModels = data.models || [];
+                const defaultModel = data.defaultModel || '';
+
+                modelSelect.innerHTML = '<option value="">모델을 선택하세요...</option>';
+                availableModels.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m;
+                    opt.textContent = m;
+                    modelSelect.appendChild(opt);
+                });
+
+                if (defaultModel && availableModels.includes(defaultModel)) {
+                    modelSelect.value = defaultModel;
+                    selectedModel     = defaultModel;
+                }
+                modelSelection.style.display = 'block';
+
+                // 서버가 내려준 사유를 배지 툴팁에 남긴다(available=false 일 때만 온다).
+                modelStatus.title = data.message || '';
+
+                if (!isOllamaBackend) {
+                    // Ollama 이외 백엔드(OpenRouter 등): 모델 셀렉트만 잠근다.
+                    //
+                    // 값을 비우는 것이 핵심이다. disabled 로 두어도 .value 는 남아 있고
+                    // getSelectedModel() 이 그대로 읽어 model 파라미터로 전송한다.
+                    // 그러면 Ollama 모델명(예: qwen3-4b:Q4_K_M)이 OpenRouter 로 나가
+                    // 404 가 난다(POST /api/v1/chat/completions). 모델은 서버 설정
+                    // (spring.ai.openai.chat.options.model)이 결정하게 두어야 한다.
+                    modelSelect.value = '';
+                    selectedModel     = '';
+                    modelSelect.disabled = true;
+                    modelStatus.textContent = `백엔드: ${backend} - 모델은 서버 설정을 따릅니다`;
+                    modelStatus.className   = 'model-status warning';
+                    chatBackendReady        = true;
+                } else if (data.available === false) {
+                    // Ollama 자체에 닿지 못한다. '모델이 없음' 과 구분해야 한다.
+                    // 고칠 것이 다르다(Ollama 를 띄우거나 spring.ai.model.chat 을 바꾼다).
+                    modelSelect.disabled    = true;
+                    modelStatus.textContent = 'Ollama 연결 안 됨 - 채팅할 수 없습니다';
+                    modelStatus.className   = 'model-status error';
+                    chatBackendReady        = false;
+                } else if (availableModels.length > 0) {
+                    modelStatus.textContent = `사용 가능: ${availableModels.length}개`;
+                    modelStatus.className   = 'model-status success';
+                    chatBackendReady        = true;
+                } else {
+                    // Ollama 는 떠 있는데 받아 둔 모델이 없다.
+                    modelStatus.textContent = '설치된 모델 없음 - ollama pull 로 모델을 받으세요';
+                    modelStatus.className   = 'model-status error';
+                    chatBackendReady        = false;
+                }
+
+                updateInputState();
+            })
+            .catch(() => {
+                modelSelection.style.display = 'block';
+                modelSelect.innerHTML  = '<option value="">모델 목록 로드 실패</option>';
+                modelSelect.disabled   = true;
+                modelStatus.textContent = '모델 목록 로드 오류 - 채팅할 수 없습니다';
+                modelStatus.className   = 'model-status error';
+                chatBackendReady        = false;
+                updateInputState();
+            });
+    }
+
+    function getSelectedModel() {
+        const s = document.getElementById('model-select');
+        return s ? s.value : '';
+    }
+
+    function onModelChange() {
+        selectedModel = getSelectedModel();
+        const modelStatus = document.getElementById('model-status');
+        if (selectedModel.trim()) {
+            modelStatus.textContent = selectedModel;
+            modelStatus.className   = 'model-status success';
+        } else {
+            modelStatus.textContent = '기본 모델 사용';
+            modelStatus.className   = 'model-status warning';
+        }
+    }
+
+    // 채팅
+
+    // isComposing 검사는 한글 때문이다. 조합 중 Enter 는 글자를 확정하는 키라서,
+    // 빼면 조합이 끝나기 전의 반쪽 문장이 전송된다.
+    function handleKeyPress(event) {
+        if (event.key === 'Enter' && !event.isComposing) sendMessage();
+    }
+
+    // 세션 유무와 LLM 백엔드 가용성에 따라 입력창 활성/비활성 전환
+    function updateInputState() {
+        const input   = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+
+        // 백엔드가 없으면 세션이 있어도 보낼 수 없다. 사유는 상단 모델 상태 배지에 있다.
+        if (!chatBackendReady) {
+            input.disabled    = true;
+            input.placeholder = 'LLM 백엔드에 연결할 수 없습니다 - 상단 모델 상태를 확인하세요';
+            sendBtn.disabled  = true;
+            return;
+        }
+
+        if (!currentSessionId) {
+            input.disabled     = true;
+            input.placeholder  = "'새 채팅' 버튼을 눌러 시작하세요";
+            sendBtn.disabled   = true;
+        } else {
+            input.disabled     = false;
+            input.placeholder  = "메시지를 입력하세요...";
+            // 전송 중이 아닐 때만 활성화 (sendMessage 가 비활성화한 상태 유지)
+            if (!input.dataset.sending) sendBtn.disabled = false;
+        }
+    }
+
+    /*
+       치환을 직접 하지 않는다. textContent 로 넣고 innerHTML 로 꺼내면서 브라우저의
+       HTML 직렬화에 맡긴다.
+
+       그 직렬화는 텍스트 모드와 속성 모드가 갈리는데, 우리가 거치는 텍스트 모드는
+       & < > U+00A0 만 바꾸고 따옴표는 그대로 둔다. 홑따옴표는 두 모드 모두 안 바꾼다.
+       그래서 따옴표 두 종류를 직접 더하는 로직을 추가. 아래 buildServerItem 처럼 결과를 속성값에
+       끼우는 곳이 있어서다(title="${...}"). 없으면 속성을 탈출해 onmouseover 등을
+       주입할 수 있다.
+    */
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function addMessage(content, isUser) {
+        const chatContainer = document.getElementById('chat-container');
+        const div = document.createElement('div');
+        div.classList.add('message', isUser ? 'user-message' : 'ai-message');
+        div.innerHTML = isUser
+            ? escapeHtml(content)
+            : DOMPurify.sanitize(marked.parse(content));
+        chatContainer.appendChild(div);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    function buildStatusHtml(type, toolName) {
+        let text, dotClass;
+        if (type === 'tool_calling') {
+            text     = (toolName || '도구') + ' 호출 중...';
+            dotClass = 'tool-calling';
+        } else if (type === 'tool_done') {
+            text     = (toolName || '도구') + ' 완료, 답변 생성 중...';
+            dotClass = '';
+        } else if (type === 'tool_error') {
+            text     = (toolName || '도구') + ' 오류 발생';
+            dotClass = 'tool-calling';
+        } else {
+            // 'thinking' 또는 기타: MCP 미연결 포함 모든 대기 상황
+            text     = '응답 생성 중...';
+            dotClass = '';
+        }
+        return `<div class="ai-status-indicator">` +
+               `<span class="ai-status-dot${dotClass ? ' ' + dotClass : ''}"></span>` +
+               `<span>${escapeHtml(text)}</span>` +
+               `</div>`;
+    }
+
+    function sendMessage() {
+        const input   = document.getElementById('message-input');
+        const message = input.value.trim();
+        const sendBtn = document.getElementById('send-btn');
+        if (!message) return;
+
+        sendBtn.disabled    = true;
+        input.dataset.sending = '1';
+        addMessage(message, true);
+        input.value = '';
+
+        const aiDiv = document.createElement('div');
+        aiDiv.classList.add('message', 'ai-message');
+        // 항상 generic "응답 생성 중..."으로 시작
+        // status 이벤트가 실제로 오면 그때 업데이트, 안 오면 그대로 유지
+        aiDiv.innerHTML = buildStatusHtml('thinking');
+        document.getElementById('chat-container').appendChild(aiDiv);
+        document.getElementById('chat-container').scrollTop =
+            document.getElementById('chat-container').scrollHeight;
+
+        const params = new URLSearchParams();
+        params.append('message', message);
+        if (currentSessionId) params.append('sessionId', currentSessionId);
+        const model = getSelectedModel();
+        if (model) params.append('model', model);
+        // 체크 상태는 서버가 끊겨도 그대로 둔다(재연결 시 복원하려고). 그래서 disabled 를 함께 본다.
+        // disabled 가 값을 빼 주는 것은 폼 전송뿐이고 .checked 는 계속 true 라,
+        // 이것을 보지 않으면 지시문 없이 보내면서 로그에는 ragMode=true 로 남는다.
+        const ragBox = document.getElementById('rag-mode');
+        params.append('ragMode', ragBox.checked && !ragBox.disabled);
+
+        const eventSource = new EventSource(`/api/chat/simple/stream?${params.toString()}`);
+        let fullResponse  = '';
+
+        // event:token 은 LLM 텍스트 청크 (JSON 으로 감쌈: {"text":"..."})
+        // SSE data: 필드는 선행 공백을 제거하므로 JSON 안에 담아 공백 보존
+        eventSource.addEventListener('token', function(event) {
+            let chunk;
+            try {
+                const obj = JSON.parse(event.data);
+                chunk = obj.text;
+            } catch (e) {
+                // JSON 이 아니면 버린다. 화면에도 콘솔에도 흔적이 남지 않는다.
+                // 그래서 서버에서 token 이벤트를 만들 때는 반드시 {"text":...} 로 감싸야 한다.
+                // EgovChatSseEvents.token 을 거쳐야 보장된다.
+                return;
+            }
+            // null / undefined / "" 모두 건너뜀
+            // 도구 호출 중간에 텍스트 없는 빈 청크가 오면 상태 표시가 지워지는 문제 방지
+            if (!chunk) return;
+
+            fullResponse += chunk;
+            try {
+                const rendered = DOMPurify.sanitize(marked.parse(fullResponse));
+                // 'MCP 서버 미연결' 이 들어 있는 첫 청크는 경고 접두사다. 뒤에 본문이
+                // 이어지므로 스피너를 남겨 둔다. 문구는 EgovChatServiceImpl 이 넣는다.
+                // 해당 부분을 고치면 이 조건도 함께 고칠 것.
+                if (chunk.includes('MCP 서버 미연결') && fullResponse.length === chunk.length) {
+                    aiDiv.innerHTML = rendered + ' ' + buildStatusHtml('thinking');
+                    loadServerStatuses();
+                } else {
+                    aiDiv.innerHTML = rendered;
+                }
+            } catch (e) {
+                aiDiv.innerText = fullResponse;
+            }
+            document.getElementById('chat-container').scrollTop =
+                document.getElementById('chat-container').scrollHeight;
+        });
+
+        // event:status 는 도구 호출 상태 (tool_calling / tool_done / tool_error + 도구명)
+        //
+        // 본문이 뜬 뒤에는 버린다. buildStatusHtml 이 aiDiv.innerHTML 을 전부
+        // 덮어써서 떠 있는 답변이 지워지기 때문이다. 그래서 답변 중간에 도구를 다시
+        // 호출해도 상태는 표시되지 않는다.
+        eventSource.addEventListener('status', function(event) {
+            if (fullResponse) return;
+            try {
+                const s = JSON.parse(event.data);
+                aiDiv.innerHTML = buildStatusHtml(s.type, s.tool);
+                document.getElementById('chat-container').scrollTop =
+                    document.getElementById('chat-container').scrollHeight;
+            } catch (e) { /* ignore */ }
+        });
+
+        // 오류 전용이 아니다. SSE 에는 종료 신호가 없어서, 응답이 정상적으로 끝나도
+        // (서버가 연결을 닫으면) 불린다. 그래서 여기가 응답 종료 처리 자리다.
+        // close() 를 빼면 자동 재접속으로 같은 요청이 다시 들어간다.
+        // 정상 종료와 오류는 fullResponse 유무로 가른다.
+        eventSource.onerror = function() {
+            eventSource.close();
+            if (!fullResponse) {
+                aiDiv.innerHTML =
+                    '<div style="color:var(--danger-50);font-style:italic;">응답 생성 중 오류가 발생했습니다.</div>';
+            }
+            delete input.dataset.sending;
+            updateInputState();
+            if (fullResponse) loadSessions();
+
+            // 응답이 끝날 때마다 서버 상태를 다시 조회한다.
+            // 이 채팅 요청을 시작할 때 getToolCallbacks() 가 연결된 MCP 서버마다 listTools()
+            // 핑을 찔러 응답 없는 서버를 FAILED 로 바꿔 둔다. 그 결과가 아래 조회에
+            // 반영되므로, rag-server 만 끊긴 경우에도 RAG 체크박스가 바로 비활성이 된다.
+            //
+            // 위쪽 'MCP 서버 미연결' 분기에도 같은 호출이 있지만, 그 경고는 도구가 하나도
+            // 없을 때만 뜬다. 다른 서버가 연결돼 있으면 경고가 없어 갱신되지 않는다.
+            loadServerStatuses();
+        };
+    }
+
+    // 세션 관리
+
+    function createNewSession() {
+        fetch('/api/chat/sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(data => {
+            currentSessionId = data.sessionId;
+            setCurrentTitle(data.title);
+            updateTitleEditBtn();
+            updateInputState();
+            document.getElementById('chat-container').innerHTML = '';
+            loadSessions();
+        })
+        .catch(e => alert('새 세션 생성 실패: ' + e.message));
+    }
+
+    function loadSessions() {
+        return fetch('/api/chat/sessions')
+            .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(sessions => {
+                const list = document.getElementById('sessions-list');
+                list.innerHTML = '';
+
+                if (sessions.length === 0) {
+                    list.innerHTML = '<div style="color:var(--gray-40);font-size:12px;padding:6px 16px;">세션이 없습니다</div>';
+                    return sessions;
+                }
+
+                sessions.forEach(s => {
+                    const item = document.createElement('div');
+                    item.className = 'session-item' + (s.sessionId === currentSessionId ? ' active' : '');
+                    item.innerHTML = `
+                        <div class="session-content" onclick="loadSession('${s.sessionId}')">
+                            <div class="session-title" id="st-${s.sessionId}">${escapeHtml(s.title)}</div>
+                            <div class="session-time">${formatDate(s.lastMessageAt)}</div>
+                        </div>
+                        <button class="edit-session-btn"
+                                onclick="startSidebarTitleEdit('${s.sessionId}', event)" title="제목 수정">&#x270E;</button>
+                        <button class="delete-session-btn"
+                                onclick="deleteSession('${s.sessionId}', event)" title="세션 삭제">&times;</button>`;
+                    list.appendChild(item);
+                });
+
+                const current = sessions.find(s => s.sessionId === currentSessionId);
+                if (current) setCurrentTitle(current.title);
+
+                return sessions;
+            });
+    }
+
+    function loadSession(sessionId) {
+        currentSessionId = sessionId;
+        updateTitleEditBtn();
+        updateInputState();
+        fetch(`/api/chat/sessions/${sessionId}`)
+            .then(r => r.json())
+            .then(s => {
+                setCurrentTitle(s.title);
+                document.getElementById('chat-container').innerHTML = '';
+                loadSessionMessages(sessionId);
+            });
+        loadSessions();
+    }
+
+    function loadSessionMessages(sessionId) {
+        fetch(`/api/chat/sessions/${sessionId}/messages`)
+            .then(r => r.json())
+            .then(messages => {
+                const container = document.getElementById('chat-container');
+                container.innerHTML = '';
+                messages.forEach(m => addMessage(m.content, m.messageType === 'USER'));
+            });
+    }
+
+    function deleteSession(sessionId, event) {
+        event.stopPropagation();
+        if (!confirm('이 세션을 삭제하시겠습니까?')) return;
+        fetch(`/api/chat/sessions/${sessionId}`, { method: 'DELETE' })
+            .then(r => {
+                if (!r.ok) throw new Error('삭제 실패');
+                if (currentSessionId === sessionId) {
+                    document.getElementById('chat-container').innerHTML = '';
+                    setCurrentTitle('새 채팅');
+                    currentSessionId = null;
+                    updateTitleEditBtn();
+                    updateInputState();
+                }
+                loadSessions();
+            })
+            .catch(e => alert('세션 삭제 실패: ' + e.message));
+    }
+
+    // 제목 수정
+
+    function setCurrentTitle(title) {
+        const el = document.getElementById('current-session-title-text');
+        if (el) el.textContent = title;
+    }
+
+    function updateTitleEditBtn() {
+        const btn = document.getElementById('title-edit-btn');
+        if (btn) btn.style.visibility = currentSessionId ? 'visible' : 'hidden';
+    }
+
+    function updateTitleApi(sessionId, newTitle) {
+        return fetch(`/api/chat/sessions/${sessionId}/title`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: newTitle })
+        });
+    }
+
+    function startTitleEdit() {
+        if (!currentSessionId) return;
+        const span    = document.getElementById('current-session-title-text');
+        const editBtn = document.getElementById('title-edit-btn');
+        if (!span) return;
+        const originalTitle = span.textContent;
+
+        const input = document.createElement('input');
+        input.type      = 'text';
+        input.className = 'title-edit-input';
+        input.value     = originalTitle;
+        input.addEventListener('click', e => e.stopPropagation());
+        span.replaceWith(input);
+        editBtn.style.display = 'none';
+        input.focus();
+        input.select();
+
+        // Enter 는 doConfirm 을 부르면서 input 의 blur 도 일으키고, blur 에도
+        // doConfirm 이 걸려 있다. 두 번 저장되지 않도록 한 번만 통과시킨다.
+        let committed = false;
+
+        function doConfirm() {
+            if (committed) return;
+            committed = true;
+            const newTitle = input.value.trim();
+            if (!newTitle || newTitle === originalTitle) { restore(originalTitle); return; }
+            updateTitleApi(currentSessionId, newTitle)
+                .then(r => { if (!r.ok) throw new Error(); restore(newTitle); loadSessions(); })
+                .catch(() => { alert('제목 수정 실패'); restore(originalTitle); });
+        }
+
+        function doCancel() {
+            if (committed) return;
+            committed = true;
+            restore(originalTitle);
+        }
+
+        function restore(title) {
+            const newSpan = document.createElement('span');
+            newSpan.id          = 'current-session-title-text';
+            newSpan.textContent = title;
+            input.replaceWith(newSpan);
+            editBtn.style.display = '';
+        }
+
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter')  { e.preventDefault(); doConfirm(); }
+            if (e.key === 'Escape') { e.preventDefault(); doCancel(); }
+        });
+        input.addEventListener('blur', doConfirm);
+    }
+
+    function startSidebarTitleEdit(sessionId, event) {
+        event.stopPropagation();
+        const titleDiv = document.getElementById('st-' + sessionId);
+        if (!titleDiv) return;
+        const originalTitle = titleDiv.textContent;
+
+        const input = document.createElement('input');
+        input.type      = 'text';
+        input.className = 'session-title-input';
+        input.value     = originalTitle;
+        input.addEventListener('click', e => e.stopPropagation());
+        titleDiv.replaceWith(input);
+        input.focus();
+        input.select();
+
+        // Enter 는 doConfirm 을 부르면서 input 의 blur 도 일으키고, blur 에도
+        // doConfirm 이 걸려 있다. 두 번 저장되지 않도록 한 번만 통과시킨다.
+        let committed = false;
+
+        function doConfirm() {
+            if (committed) return;
+            committed = true;
+            const newTitle = input.value.trim();
+            if (!newTitle || newTitle === originalTitle) { restore(originalTitle); return; }
+            updateTitleApi(sessionId, newTitle)
+                .then(r => {
+                    if (!r.ok) throw new Error();
+                    restore(newTitle);
+                    if (sessionId === currentSessionId) setCurrentTitle(newTitle);
+                })
+                .catch(() => { alert('제목 수정 실패'); restore(originalTitle); });
+        }
+
+        function doCancel() {
+            if (committed) return;
+            committed = true;
+            restore(originalTitle);
+        }
+
+        function restore(title) {
+            const newDiv = document.createElement('div');
+            newDiv.className    = 'session-title';
+            newDiv.id           = 'st-' + sessionId;
+            newDiv.textContent  = title;
+            input.replaceWith(newDiv);
+        }
+
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter')  { e.preventDefault(); doConfirm(); }
+            if (e.key === 'Escape') { e.preventDefault(); doCancel(); }
+        });
+        input.addEventListener('blur', doConfirm);
+    }
+
+    function formatDate(dateString) {
+        const date     = new Date(dateString);
+        const now      = new Date();
+        const diffMins = Math.floor((now - date) / 60000);
+        const diffHrs  = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHrs / 24);
+        if (diffMins < 1)  return '방금 전';
+        if (diffMins < 60) return `${diffMins}분 전`;
+        if (diffHrs  < 24) return `${diffHrs}시간 전`;
+        if (diffDays < 7)  return `${diffDays}일 전`;
+        return date.toLocaleDateString('ko-KR');
+    }
+
+    // 사이드바 너비 조절
+    //
+    // 기본 폭은 CSS 의 --lnb-w 이고, 사용자가 끌면 --lnb-w-user 를 올려 그 값이 먼저 적용된다.
+    // 둘로 나눈 이유는 끌지 않은 사용자에게는 화면 폭별 기본값(반응형 @media)이 그대로
+    // 남게 하려는 것이다. 정한 값은 localStorage 에 두어 다음 방문에도 유지한다.
+
+    const LNB_MIN_W     = 180;
+    const LNB_MAX_W     = 560;
+    const LNB_WIDTH_KEY = 'mcpClient.lnbWidth';
+
+    let lnbResizer = null;
+
+    // 저장이 막힌 브라우저에서도 조절 자체는 되어야 하므로 try 로 감싼다
+    function readStoredLnbWidth() {
+        try { return parseInt(localStorage.getItem(LNB_WIDTH_KEY), 10); }
+        catch (e) { return NaN; }
+    }
+
+    function storeLnbWidth(px) {
+        try { localStorage.setItem(LNB_WIDTH_KEY, String(px)); } catch (e) { }
+    }
+
+    function clearStoredLnbWidth() {
+        try { localStorage.removeItem(LNB_WIDTH_KEY); } catch (e) { }
+    }
+
+    // 본문이 사라질 만큼 넓히지 못하게 화면 폭의 절반을 넘지 않게 한다
+    function clampLnbWidth(px) {
+        const limit = Math.min(LNB_MAX_W, Math.round(window.innerWidth * 0.5));
+        return Math.max(LNB_MIN_W, Math.min(Math.round(px), limit));
+    }
+
+    function applyLnbWidth(px) {
+        document.documentElement.style.setProperty('--lnb-w-user', px + 'px');
+        if (lnbResizer) lnbResizer.setAttribute('aria-valuenow', String(px));
+    }
+
+    function resetLnbWidth() {
+        document.documentElement.style.removeProperty('--lnb-w-user');
+        clearStoredLnbWidth();
+        if (lnbResizer) lnbResizer.removeAttribute('aria-valuenow');
+    }
+
+    function initLnbResizer() {
+        lnbResizer = document.getElementById('lnb-resizer');
+        const sidebar = document.querySelector('.krds-side-navigation');
+        if (!lnbResizer || !sidebar) return;
+
+        lnbResizer.setAttribute('aria-valuemin', String(LNB_MIN_W));
+        lnbResizer.setAttribute('aria-valuemax', String(LNB_MAX_W));
+
+        const saved = readStoredLnbWidth();
+        if (!isNaN(saved)) applyLnbWidth(clampLnbWidth(saved));
+
+        let startX = 0;
+        let startW = 0;
+
+        function onPointerMove(e) {
+            applyLnbWidth(clampLnbWidth(startW + (e.clientX - startX)));
+        }
+
+        function onPointerUp() {
+            document.removeEventListener('pointermove', onPointerMove);
+            document.removeEventListener('pointerup', onPointerUp);
+            lnbResizer.classList.remove('dragging');
+            document.body.classList.remove('lnb-resizing');
+            storeLnbWidth(Math.round(sidebar.getBoundingClientRect().width));
+        }
+
+        // pointer 이벤트 하나로 마우스, 터치, 펜을 같이 받는다
+        lnbResizer.addEventListener('pointerdown', function (e) {
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            startX = e.clientX;
+            startW = sidebar.getBoundingClientRect().width;
+            lnbResizer.classList.add('dragging');
+            document.body.classList.add('lnb-resizing');
+            document.addEventListener('pointermove', onPointerMove);
+            document.addEventListener('pointerup', onPointerUp);
+            e.preventDefault();
+        });
+
+        // 두 번 누르면 기본 폭으로 되돌린다
+        lnbResizer.addEventListener('dblclick', resetLnbWidth);
+
+        // 키보드: 좌우 화살표 16px(Shift 48px), Home 은 기본 폭
+        lnbResizer.addEventListener('keydown', function (e) {
+            const step = e.shiftKey ? 48 : 16;
+            const now  = sidebar.getBoundingClientRect().width;
+            if (e.key === 'ArrowLeft') {
+                applyLnbWidth(clampLnbWidth(now - step));
+            } else if (e.key === 'ArrowRight') {
+                applyLnbWidth(clampLnbWidth(now + step));
+            } else if (e.key === 'Home') {
+                resetLnbWidth();
+                e.preventDefault();
+                return;
+            } else {
+                return;
+            }
+            e.preventDefault();
+            storeLnbWidth(Math.round(sidebar.getBoundingClientRect().width));
+        });
+
+        // 창을 줄이면 저장값이 화면 폭의 절반을 넘을 수 있어 다시 맞춘다.
+        // 현재 폭이 아니라 저장값에서 다시 계산해야 좁혔다 넓혔을 때 설정이 남는다.
+        window.addEventListener('resize', function () {
+            const w = readStoredLnbWidth();
+            if (!isNaN(w)) applyLnbWidth(clampLnbWidth(w));
+        });
+    }
+
+    // 초기화
+
+    document.addEventListener('DOMContentLoaded', function () {
+        initLnbResizer();
+        loadOllamaModels();
+        loadServerStatuses();
+
+        loadSessions()
+            .then(sessions => {
+                if (!sessions || sessions.length === 0) {
+                    createNewSession();
+                } else {
+                    loadSession(sessions[0].sessionId);
+                }
+            })
+            .catch(() => createNewSession());
+    });
+</script>
+</body>
+</html>

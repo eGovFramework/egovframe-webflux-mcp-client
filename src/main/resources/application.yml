@@ -1,0 +1,136 @@
+spring:
+  application:
+    name: egovframe-webflux-mcp-client
+
+  autoconfigure:
+    exclude:
+      # MCP 클라이언트 자동 구성에서 eagerly blocking 초기화 제거 → 서버 없이 기동 가능
+      - org.springframework.ai.mcp.client.common.autoconfigure.McpClientAutoConfiguration
+      - org.springframework.ai.mcp.client.common.autoconfigure.McpToolCallbackAutoConfiguration
+
+  main:
+    allow-bean-definition-overriding: true   # eGovFrame + Spring AI 빈 충돌 회피
+
+  http:
+    codecs:
+      max-in-memory-size: 52428800  # 멀티파트 업로드 허용 크기 50MB
+
+  thymeleaf:
+    prefix: classpath:/templates/
+    suffix: .html
+    cache: false
+
+  # 클라이언트 전용 PostgreSQL (채팅 이력 + 세션 관리)
+  datasource:
+    url: jdbc:postgresql://localhost:5433/chatdb
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  ai:
+    # Ollama LLM
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        options:
+          model: qwen3-4b:Q4_K_M
+          temperature: 0.7
+          # 컨텍스트 창 크기. Ollama 런타임 기본값이 4096 인데 RAG 에는 부족하다.
+          # 한 요청에 (MCP 도구 정의 + 검색 결과 5건 + 대화 이력)이 함께 실리므로
+          # 4096 을 쉽게 넘고, 넘으면 Ollama 가 400 을 돌려준다.
+          #   srv send_error: request (4755 tokens) exceeds the available context size (4096 tokens)
+          # 모델 자체의 상한과는 다르다. qwen3-4b 의 context length 는 40960 이지만
+          # Modelfile 에 num_ctx 가 없으면 런타임은 4096 으로 뜬다.
+          # 값을 올리면 KV 캐시 메모리가 늘어난다. 8GB VRAM + 4B Q4 기준 16384 는 여유가 있다.
+          num-ctx: 16384
+
+    # Chat Memory JDBC (spring_ai_chat_memory 테이블 자동 생성)
+    chat:
+      memory:
+        repository:
+          jdbc:
+            initialize-schema: always
+
+    # Retry
+    retry:
+      max-attempts: 2
+
+    # MCP Client (Streamable HTTP)
+    mcp:
+      client:
+        type: ASYNC
+        # IDE(vscode-spring-boot)가 아래 url·command·args 를 'Unknown property' 로 표시하지만
+        # 오탐이다. ConnectionParameters·Parameters 가 record 라서 setter 가 없고, Spring AI 의
+        # 설정 메타데이터도 connections 맵 안쪽 필드를 기술하지 않아 IDE 가 참고할 정보가 없다.
+        # 바인딩은 생성자로 정상 동작한다(기동 로그에서 연결 확인).
+        streamable-http:
+          connections:
+            rag-server:
+              url: ${MCP_SERVER_URL:http://localhost:9090}
+        # stdio MCP 서버. 기본은 비어 있다. 쓸 서버는 각자 고른다(README 참고).
+        # 레지스트리가 HTTP 와 같은 방식으로 다루므로 항목만 추가하면 사이드바에 나온다.
+        #
+        # 연결은 자동 구성이 아니라 EgovMcpServerRegistry 가 한다. Spring AI 의 프로퍼티
+        # 클래스(McpStdioClientProperties)에만 바인딩한다. McpClientAutoConfiguration 은
+        # 위 spring.autoconfigure.exclude 로 제외해 두었다(서버 없이 기동하기 위해).
+        stdio:
+          connections: {}
+        # MCP 도구 호출(적재 등)의 전체 응답 대기 시간.
+        #
+        # 서버의 spring.ai.mcp.server.request-timeout(Sampling 대기, 현재 30s)보다 넉넉해야 한다.
+        # 적재는 [텍스트 추출 → Sampling 요약 → 청킹 → 임베딩] 순서라 요약 시간이 그대로 더해진다.
+        # 로컬 소형 모델은 긴 문서 요약에 수십 초가 걸리므로 60s 로는 부족했다.
+        request-timeout: 180000
+
+# Server Port
+server:
+  port: 8080
+  # 기본은 로컬 전용. 이 클라이언트의 REST 엔드포인트에는 인증이 없고, 적재·MCP 연결
+  # 제어·위험 작업 토글·대화 이력 조회가 모두 열려 있다. 외부에 노출할 일이 있으면
+  # BIND_ADDRESS=0.0.0.0 으로 열되 그 전에 접근 통제를 먼저 둘 것.
+  # 브라우저는 같은 PC 에서 접속하므로 평소에는 열 이유가 없다.
+  address: ${BIND_ADDRESS:127.0.0.1}
+
+# Logging
+logging:
+  level:
+    root: INFO
+    com.example.client: DEBUG
+    org.springframework.ai: DEBUG
+    org.springframework.ai.mcp: TRACE
+    # Ollama 스트리밍은 마지막 청크에만 eval-duration 등의 지표를 담는데,
+    # Spring AI 가 매 청크마다 "Ignore null value for key [...]" 를 DEBUG 로 남긴다.
+    # 토큰 하나에 4줄씩 쌓여 도구 호출·검색 로그가 파묻히므로 이 클래스만 올린다.
+    # (OpenRouter 경로에서는 나타나지 않고 Ollama 경로에서만 발생한다.)
+    org.springframework.ai.chat.metadata.ChatResponseMetadata: WARN
+
+# MCP clientInfo.name: 서버가 적재 문서의 출처(sourceClient)를 구분하는 데 사용.
+# 클라이언트를 여러 대 배포할 경우 배포마다 고유한 값으로 변경할 것
+app:
+  mcp-client-id: egovframe-webflux-mcp-client
+  # 서버 MCP 엔드포인트 인증 키. 서버의 app.security.api-keys 목록과 동일한 값으로 설정.
+  #
+  # 연결 단위 기본 헤더(X-MCP-API-Key)로 실리므로 initialize 를 포함한 모든 요청에 붙는다.
+  # 서버가 MCP 엔드포인트 전체에 이 키를 요구하기 때문에, 비어 있거나 틀리면 적재뿐 아니라
+  # 연결 자체가 403 으로 실패한다(검색도 안 된다). 사이드바에 '인증' 배지로 구분 표시된다.
+  #
+  # 이 값은 등록된 모든 HTTP MCP 연결(streamable-http.connections)에 같은 헤더로 붙는다.
+  # 다른 HTTP MCP 서버를 추가하면 그 서버에도 이 키가 전달되므로 주의한다.
+  # stdio 서버는 헤더 개념이 없어 무관하다.
+  mcp-api-key: "${MCP_API_KEY:}"
+
+  chat:
+    memory:
+      max-messages: 50  # LLM 컨텍스트 윈도우 크기. 초과 시 오래된 메시지가 DB에서 실제로 삭제된다. 너무 적으면 세션 제목과 이력이 어긋난다.
+
+  rag:
+    # RAG 지시문: 서버의 @McpPrompt rag_assistant 를 받아 쓴다(클라이언트 하드코딩 없음).
+    #
+    prompt-strict: false   # true 면 서버 STRICT_SYSTEM_PROMPT (모든 질문에 검색 강제)

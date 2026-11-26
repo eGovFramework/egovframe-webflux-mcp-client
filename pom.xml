@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.egovframe.boot</groupId>
+		<artifactId>egovframe-boot-starter-parent</artifactId>
+		<version>5.1.0</version>
+		<relativePath/>
+	</parent>
+	<groupId>com.example</groupId>
+	<artifactId>egovframe-webflux-mcp-client</artifactId>
+	<version>1.0.0</version>
+	<name>egovframe-webflux-mcp-client</name>
+	<description>egovframe MCP Client with Ollama LLM</description>
+
+	<properties>
+		<java.version>17</java.version>
+	</properties>
+
+	<repositories>
+		<repository>
+			<id>mvn2s</id>
+			<url>https://repo1.maven.org/maven2/</url>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
+			<snapshots>
+				<enabled>true</enabled>
+			</snapshots>
+		</repository>
+		<repository>
+			<id>egovframe2</id>
+			<url>https://maven.egovframe.go.kr/maven/</url>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</repository>
+	</repositories>
+
+	<dependencies>
+		<!-- eGovFrame Common (EgovAbstractServiceImpl) -->
+		<dependency>
+			<groupId>org.egovframe.rte</groupId>
+			<artifactId>egovframe-rte-fdl-cmmn</artifactId>
+		</dependency>
+
+		<!-- Spring Boot WebFlux -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			 <artifactId>spring-boot-starter-webflux</artifactId>
+			<exclusions>
+				<exclusion>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-starter-logging</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+
+		<!-- Spring AI MCP Client -->
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-mcp-client-webflux</artifactId>
+		</dependency>
+
+		<!-- Spring AI Ollama (로컬 LLM) -->
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-model-ollama</artifactId>
+		</dependency>
+
+		<!-- Spring AI ChatClient (ChatClient, MessageChatMemoryAdvisor) -->
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-client-chat</artifactId>
+		</dependency>
+
+		<!-- Thymeleaf (WebFlux 환경에서 자동으로 Reactive ViewResolver 사용) -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-thymeleaf</artifactId>
+			<exclusions>
+				<exclusion>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-starter-logging</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+
+		<!-- Spring Data JPA (세션 메타데이터 관리) -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa</artifactId>
+			<exclusions>
+				<exclusion>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-starter-logging</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+
+		<!-- PostgreSQL Driver -->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+
+		<!-- Spring AI Chat Memory JDBC Repository (채팅 이력 영속화) -->
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-model-chat-memory-repository-jdbc</artifactId>
+		</dependency>
+
+		<!-- Lombok -->
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<scope>provided</scope>
+		</dependency>
+
+		<!-- Test -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<!--
+						stdio MCP 서버(@modelcontextprotocol/server-filesystem 등)가 돌려주는
+						한글이 깨지는 것을 막는다.
+
+						MCP Java SDK(mcp 0.18.3) StdioClientTransport 는 자식 프로세스로 보낼 때는
+						UTF-8을 명시하지만, 받을 때는 new InputStreamReader(InputStream) 을 써서
+						JVM 기본 charset 으로 디코딩한다. Java 18+ 는 기본이 UTF-8이라 문제가 없으나
+						이 프로젝트는 Java 17이고, 한글 Windows 에서는 기본이 MS949 라
+						UTF-8 바이트가 MS949 로 해석되어 '회의록' → '쉶쓽濡' 처럼 깨진다.
+						HTTP 로 붙는 MCP 서버는 영향이 없고 stdio 서버만 해당한다.
+
+						java -jar 로 직접 실행할 때도 같은 옵션이 필요하다:
+						  java -Dfile.encoding=UTF-8 -jar target/*.jar
+					-->
+					<jvmArguments>-Dfile.encoding=UTF-8</jvmArguments>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>
